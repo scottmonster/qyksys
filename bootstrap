@@ -329,6 +329,8 @@ clone_repo(){
 main(){
   preflight
   clone_repo
+  echo "returned from clone_repo"
+  echo "$PWD"
   export SUDO_CMD="$(command -v sudo)"
   export SUDO_FILE
   export PATH="$PWD/scripts/bin:$PWD/scripts/bin/caution:$PATH"
