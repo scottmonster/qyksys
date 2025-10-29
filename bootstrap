@@ -315,11 +315,11 @@ clone_repo(){
   if ((not_git+not_scripts+not_qyksys)); then
     echo "cloning repo"
     git clone "$GH_URL"
-    echo "changing dirs"
     cd qyksys
+    return 0
   else
     echo "i think we are already in the repo"
-
+    return 1
   fi
 
 
@@ -331,12 +331,16 @@ clone_repo(){
 main(){
   preflight
   clone_repo
+  if clone_repo; then
+    # cd qyksys
+    echo "yes we cloned the repo"
+  fi
   echo "returned from clone_repo"
   echo "$PWD"
   export SUDO_CMD="$(command -v sudo)"
   export SUDO_FILE
   export PATH="$PWD/scripts/bin:$PWD/scripts/bin/caution:$PATH"
-  ./prep.sh upper
+  $PWD/prep.sh upper
 
 
 }
@@ -344,4 +348,4 @@ main(){
 main "$@"
 exit 0
 
-
+# ./share/qyksys/bootstrap

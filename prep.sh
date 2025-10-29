@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set -x
 trap 'echo "FAILED at $BASH_COMMAND line $LINENO" >&2' ERR
 set -euo pipefail
 
@@ -15,7 +16,7 @@ if [[ ! -d "$seeds" ]]; then
   echo "we need to panic exit becasue we don't know where to work"
   exit 1
 fi
-
+echo "seeds: $seeds"
 scripts_dir="$(dirname "$seeds")"
 layers="$scripts_dir/layers"
 profiles="$scripts_dir/profiles"
