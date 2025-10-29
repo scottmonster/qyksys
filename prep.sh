@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -x
+
 trap 'echo "FAILED at $BASH_COMMAND line $LINENO" >&2' ERR
 set -euo pipefail
 
@@ -27,14 +27,6 @@ if [[ ! -f "$target_profile" ]]; then
   echo "we need to panic exit because profile $target_profile does not exist"
   exit 1
 fi
-
-
-
-get_seed_match(){
-
-  echo "todo: check args and panic exit if needed" >&2
-
-}
 
 
 
