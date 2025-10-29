@@ -416,7 +416,7 @@ get_seed(){
       when="$when_file"
       [[ ! -x "$when" ]] && chmod +x "$when"
     else
-      echo "[NO WHEN DECLARED] no when was declared for $seed_match"
+      echo "[NO WHEN DECLARED] no when was declared for $seed_match" >&2
       exit 69
     fi 
   fi
