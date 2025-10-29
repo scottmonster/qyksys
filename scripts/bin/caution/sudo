@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+echo "sudo overide running: $@"
+# echo "SUDO_FILE=$SUDO_FILE"
+# echo "SUDO_CMD=$SUDO_CMD"
+SUDO_ASKPASS="$(command -v resolve_pass)" $SUDO_CMD -A "$@"
+
+

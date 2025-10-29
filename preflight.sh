@@ -1,0 +1,271 @@
+
+
+# ============================================================================
+# OS Detection & Package Mapping
+# ============================================================================
+
+get_os(){
+  if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    case "${ID:-}" in
+      ubuntu|pop) printf "ubuntu"; return 0 ;;
+      debian|raspbian|kali|parrot|dietpi|mx) printf "debian"; return 0 ;;
+      fedora) printf "fedora"; return 0 ;;
+      rhel|centos|rocky|almalinux) printf "redhat"; return 0 ;;
+      arch|manjaro|endeavouros|garuda) printf "arch"; return 0 ;;
+      opensuse*|sles) printf "suse"; return 0 ;;
+      alpine) printf "alpine"; return 0 ;;
+    esac
+    case "${ID_LIKE:-}" in
+      *ubuntu*) printf "ubuntu"; return 0 ;;
+      *debian*) printf "debian"; return 0 ;;
+      *rhel*|*fedora*) printf "redhat"; return 0 ;;
+      *arch*) printf "arch"; return 0 ;;
+      *suse*) printf "suse"; return 0 ;;
+    esac
+  fi
+
+  case "$(uname -s)" in
+    Darwin) printf "macos"; return 0 ;;
+    Linux)
+      if command -v apt-get >/dev/null 2>&1; then printf "debian"
+      elif command -v dnf >/dev/null 2>&1; then printf "fedora"
+      elif command -v pacman >/dev/null 2>&1; then printf "arch"
+      elif command -v zypper >/dev/null 2>&1; then printf "suse"
+      elif command -v apk >/dev/null 2>&1; then printf "alpine"
+      else printf "linux"; fi
+      ;;
+    *) printf "unknown" ;;
+  esac
+}
+
+get_install_cmd(){
+  case "$(get_os)" in
+    ubuntu|debian) printf "apt-get install -y" ;;
+    fedora) printf "dnf install -y" ;;
+    redhat) 
+      if command -v dnf >/dev/null 2>&1; then printf "dnf install -y"
+      else printf "yum install -y"; fi ;;
+    arch) printf "pacman -S --noconfirm" ;;
+    suse) printf "zypper install -y" ;;
+    alpine) printf "apk add" ;;
+    macos) printf "brew install" ;;
+    *) return 1 ;;
+  esac
+}
+
+get_os_package(){
+  local generic_pkg="$1"
+  local os
+  os="$(get_os)"
+  
+  # Package name mappings for different distributions
+  case "$generic_pkg" in
+    python3)
+      case "$os" in
+        arch) printf "python" ;;
+        *) printf "python3" ;;
+      esac
+      ;;
+    ansible|git|bash)
+      printf "%s" "$generic_pkg"
+      ;;
+    *)
+      printf "%s" "$generic_pkg"
+      ;;
+  esac
+}
+
+get_sudo_group_name(){
+  case "$(get_os)" in
+    ubuntu|debian) printf "sudo" ;;
+    fedora|redhat|arch|suse|alpine) printf "wheel" ;;
+    macos) printf "admin" ;;
+    *) printf "sudo" ;;
+  esac
+}
+
+get_sudo_group_id(){
+  case "$(get_os)" in
+    ubuntu|debian) printf "27" ;;
+    arch) printf "998" ;;
+    fedora|redhat|suse|alpine) printf "10" ;;
+    macos) printf "80" ;;
+    *) printf "27" ;;
+  esac
+}
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+is_root(){
+  [ "$(id -u)" -eq 0 ]
+}
+
+is_installed(){
+  command -v "$1" >/dev/null 2>&1
+}
+
+# ============================================================================
+# Sudo Configuration
+# ============================================================================
+
+add_user_to_group(){
+  local user_to_add="$1"
+  local group_name="$2"
+  local group_id="$3"
+
+  if [ "$(uname -s)" = "Darwin" ]; then
+    if ! dscl . -read /Groups/"$group_name" >/dev/null 2>&1; then
+      dseditgroup -o create -i "$group_id" "$group_name" 2>/dev/null || dseditgroup -o create "$group_name"
+    fi
+    if ! dsmemberutil checkmembership -U "$user_to_add" -G "$group_name" 2>/dev/null | grep -q "user is a member"; then
+      dseditgroup -o edit -a "$user_to_add" -t user "$group_name"
+    fi
+  else
+    if ! getent group "$group_name" >/dev/null 2>&1; then
+      if ! getent group | grep -qE "^[^:]+:[^:]*:${group_id}:"; then
+        groupadd -g "$group_id" "$group_name" 2>/dev/null || true
+      else
+        groupadd "$group_name" 2>/dev/null || true
+      fi
+    fi
+    if ! getent group "$group_name" | grep -q "\b${user_to_add}\b"; then
+      usermod -aG "$group_name" "$user_to_add"
+    fi
+  fi
+}
+
+ensure_sudo_usable(){
+  local to_run=""
+  
+  if ! is_installed sudo; then
+    local install_cmd
+    install_cmd=$(get_install_cmd) || { echo "ERROR: Unknown package manager" >&2; exit 1; }
+    to_run="${install_cmd} sudo && "
+  fi
+
+  local sudo_group
+  local sudo_gid
+  sudo_group=$(get_sudo_group_name)
+  sudo_gid=$(get_sudo_group_id)
+
+  if ! id -nG "$USER" | tr ' ' '\n' | grep -Eqx 'sudo|wheel|admin'; then
+    to_run="${to_run}$(declare -f add_user_to_group); add_user_to_group \"$USER\" \"$sudo_group\" \"$sudo_gid\""
+  fi
+
+  if [ -n "$to_run" ]; then
+    echo "Configuring sudo access (requires root password)"
+    su -l -c "bash -c '${to_run}'" root < /dev/tty || { echo "ERROR: Failed to configure sudo" >&2; exit 1; }
+    
+    if command -v sg >/dev/null 2>&1; then
+      exec sg "$sudo_group" -c "$0 $*"
+    else
+      echo "Please log out and back in for group changes to take effect, then re-run this script."
+      exit 0
+    fi
+  fi
+}
+
+validate_sudo_secret(){
+  [ -f "$SUDO_FILE" ] || return 1
+  sudo -S -p '' -v <"$SUDO_FILE" 2>/dev/null
+}
+
+prompt_sudo_password(){
+  local attempt=0
+  local max_attempts=3
+  local secret
+
+  mkdir -p "$BOOTSTRAP_DIR"
+  rm -f "$SUDO_FILE" 2>/dev/null || true
+
+  while [ "$attempt" -lt "$max_attempts" ]; do
+    attempt=$((attempt + 1))
+
+    : >"$SUDO_FILE"
+    chmod 600 "$SUDO_FILE"
+
+    printf "[sudo] password for %s: " "$USER"
+    stty -echo 2>/dev/null || true
+    IFS= read -r secret || true
+    stty echo 2>/dev/null || true
+    printf "\n"
+
+    printf "%s" "$secret" >"$SUDO_FILE"
+
+    if validate_sudo_secret; then
+      return 0
+    else
+      echo "Sorry, try again."
+      rm -f "$SUDO_FILE"
+      if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "ERROR: Too many incorrect attempts" >&2
+        return 1
+      fi
+    fi
+  done
+  return 1
+}
+
+ensure_sudo_ready(){
+  if is_root; then
+    return 0
+  fi
+
+  ensure_sudo_usable
+
+  sudo -k
+
+  if [ -f "$SUDO_FILE" ] && validate_sudo_secret; then
+    return 0
+  fi
+
+  prompt_sudo_password || { echo "ERROR: Failed to validate sudo password" >&2; exit 1; }
+}
+
+# ============================================================================
+# Package Installation
+# ============================================================================
+
+check_and_install_packages(){
+  local deps="$1"
+  local to_install=()
+  local pkg os_pkg
+
+  # Check which packages need installation
+  for pkg in $deps; do
+    os_pkg=$(get_os_package "$pkg")
+    if ! is_installed "$pkg"; then
+      to_install+=("$os_pkg")
+    fi
+  done
+
+  # Install if needed
+  if [ "${#to_install[@]}" -gt 0 ]; then
+    echo "Installing: ${to_install[*]}"
+    local install_cmd
+    install_cmd=$(get_install_cmd) || { echo "ERROR: Unknown package manager" >&2; exit 1; }
+    
+    # Update package cache for apt-based systems
+    if [[ "$install_cmd" == apt-get* ]]; then
+      if is_root; then
+        apt-get update -qq
+      else
+        sudo -S sh -c "apt-get update -qq" <"$SUDO_FILE"
+      fi
+    fi
+
+    # Install packages
+    if is_root; then
+      $install_cmd "${to_install[@]}"
+    else
+      sudo -S sh -c "$install_cmd ${to_install[*]}" <"$SUDO_FILE"
+    fi
+  fi
+}
+
+
+ensure_sudo_ready
+check_and_install_packages

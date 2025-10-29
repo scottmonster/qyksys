@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+
+
+readonly DEBIAN_DEPS="git bash"
+
+
+
+readonly BOOTSTRAP_DIR="/tmp/bootstrap"
+readonly BOOTSTRAP_DIR="${BOOTSTRAP_DIR:-/tmp/bootstrap}"
+readonly SUDO_FILE="${SUDO_FILE:-$BOOTSTRAP_DIR/sudo.key}"
+readonly SUDO_FILE_TIMEOUT="2h"
+
+
+
+# Cleanup handler
+cleanup(){
+  timeout_script="./bin/timeout_file.sh"
+  if [ -f "$timeout_script" ]; then
+    "$timeout_script" "$SUDO_FILE" "$SUDO_FILE_TIMEOUT" &
+  fi
+}
+trap cleanup EXIT
+
+
+main(){
+
+}
+
+main "$@"
+exit 1
