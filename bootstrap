@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 # setfile="env/set.sh"
 # [[ -f "$setfile" ]] && source "$setfile"
 
