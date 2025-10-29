@@ -206,7 +206,7 @@ preflight(){
     local max_attempts=3
     local secret
 
-    mkdir -p "$BOOTSTRAP_DIR"
+    mkdir -p "$(dirname "$SUDO_FILE")"
     rm -f "$SUDO_FILE" 2>/dev/null || true
 
     while [ "$attempt" -lt "$max_attempts" ]; do
