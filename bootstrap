@@ -326,122 +326,117 @@ clone_repo(){
 
 gather_and_run_seeds(){
   if [[ $# -lt 1 ]]; then
-  echo "no profile provided"
-  echo "Usage: gather_and_run_seeds <profile>" >&2
-  exit 2
-fi
+    echo "no profile provided"
+    echo "Usage: gather_and_run_seeds <profile>" >&2
+    exit 2
+  fi
 
-seeds="$(find "$PWD" -maxdepth 3 -type d -name seeds)"
+  seeds="$(find "$PWD" -maxdepth 3 -type d -name seeds)"
 
-if [[ ! -d "$seeds" ]]; then
-  echo "we need to panic exit becasue we don't know where to work"
-  exit 1
-fi
-echo "seeds: $seeds"
-scripts_dir="$(dirname "$seeds")"
-layers="$scripts_dir/layers"
-profiles="$scripts_dir/profiles"
+  if [[ ! -d "$seeds" ]]; then
+    echo "we need to panic exit becasue we don't know where to work"
+    exit 1
+  fi
+  echo "seeds: $seeds"
+  scripts_dir="$(dirname "$seeds")"
+  layers="$scripts_dir/layers"
+  profiles="$scripts_dir/profiles"
 
-target_profile="$profiles/${1}.conf"
+  target_profile="$profiles/${1}.conf"
 
-if [[ ! -f "$target_profile" ]]; then
-  echo "we need to panic exit because profile $target_profile does not exist"
-  exit 1
-fi
-
-
+  if [[ ! -f "$target_profile" ]]; then
+    echo "we need to panic exit because profile $target_profile does not exist"
+    exit 1
+  fi
 
 
-target_seeds=()
-get_seed(){
-  target="$1"
 
-  source /etc/os-release
 
-  VERSION_FULL="${DEBIAN_VERSION_FULL:-$VERSION_ID}"
-  VERSION_MAJOR="${VERSION_FULL%%.*}"
+  target_seeds=()
+  get_seed(){
+    target="$1"
 
-  local V_IDS=($ID ${ID_LIKE:-})
+    source /etc/os-release
 
-  
-  local seed_match=""
-  for V_ID in "${V_IDS[@]}"; do 
+    VERSION_FULL="${DEBIAN_VERSION_FULL:-$VERSION_ID}"
+    VERSION_MAJOR="${VERSION_FULL%%.*}"
 
-    patterns=(
-      "$target/"*"$V_ID"*"$VERSION_FULL"*
-      "$target/"*"$VERSION_FULL"*"$V_ID"*
-      "$target/"*"$V_ID"*"$VERSION_MAJOR"*
-      "$target/"*"$VERSION_MAJOR"*"$V_ID"*
-      "$target/"*"$V_ID"*
-    )
+    local V_IDS=($ID ${ID_LIKE:-})
 
     
-    # ensure globs that don't match expand to empty
-    shopt -s nullglob
-    for pat in "${patterns[@]}"; do
-      # expand pattern into an array of matches
-      old_nullglob=$(shopt -p nullglob) 
-      matches=( $pat )
-      if (( ${#matches[@]} == 1 )); then
-        # echo "${matches[0]}"
-        seed_match="${matches[0]}"
-        break # break the inner look as soon as we find a match
-      fi
+    local seed_match=""
+    for V_ID in "${V_IDS[@]}"; do 
+
+      patterns=(
+        "$target/"*"$V_ID"*"$VERSION_FULL"*
+        "$target/"*"$VERSION_FULL"*"$V_ID"*
+        "$target/"*"$V_ID"*"$VERSION_MAJOR"*
+        "$target/"*"$VERSION_MAJOR"*"$V_ID"*
+        "$target/"*"$V_ID"*
+      )
+
+      
+      # ensure globs that don't match expand to empty
+      shopt -s nullglob
+      for pat in "${patterns[@]}"; do
+        # expand pattern into an array of matches
+        old_nullglob=$(shopt -p nullglob) 
+        matches=( $pat )
+        if (( ${#matches[@]} == 1 )); then
+          # echo "${matches[0]}"
+          seed_match="${matches[0]}"
+          break # break the inner look as soon as we find a match
+        fi
+      done
+      eval "$old_nullglob"
+      [[ "$seed_match" != "" ]] && break # break the outer loop as soon as seed_match is set
     done
-    eval "$old_nullglob"
-    [[ "$seed_match" != "" ]] && break # break the outer loop as soon as seed_match is set
-  done
 
-  if [[ -z "$seed_match" ]]; then
-  
-    echo "we should panic exit"
-    exit 1
+    if [[ -z "$seed_match" ]]; then
+    
+      echo "we should panic exit"
+      exit 1
+      return 1
+    fi
 
-  fi
-
-  
-
-  # the number of lines to search for the when line
-  local l=5
-  local when="$(head -5 "$seed_match" | grep when: || true)"
-  when="${when#*when:}"
-  when="${when#"${when%%[![:space:]]*}"}" # ltrim
-  when="${when%"${when##*[![:space:]]}"}" # rtrim
+    
+    # the number of lines to search for the when line
+    local l=5
+    local when=""
+    when="$(head -5 "$seed_match" | grep when: || true)"
+    when="${when#*when:}"
+    when="${when#"${when%%[![:space:]]*}"}" # ltrim
+    when="${when%"${when##*[![:space:]]}"}" # rtrim
 
 
-  if [[ "$when" == "" ]]; then
-  local when_file="$target/when.sh"
-    if [[ -f "$when_file" ]]; then
-      # istrue expects scripts to be executable
-      when="$when_file"
-      [[ ! -x "$when" ]] && chmod +x "$when"
+    if [[ "$when" == "" ]]; then
+    local when_file="$target/when.sh"
+      if [[ -f "$when_file" ]]; then
+        # istrue expects scripts to be executable
+        when="$when_file"
+        [[ ! -x "$when" ]] && chmod +x "$when"
+      else
+        echo "[NO WHEN DECLARED] no when was declared for $seed_match" >&2
+        exit 69
+        return 69
+      fi 
+    fi
+    
+    local seed_name seed_file_name when_res
+    seed_name="$(basename $(dirname "$seed_match"))"
+    seed_file_name="$(basename "$seed_match")"
+
+    # echo "$seed_name" >&2
+    if istrue $when; then
+      when_res="true"
+      echo "$seed_match"
     else
-      echo "[NO WHEN DECLARED] no when was declared for $seed_match" >&2
-      exit 69
-    fi 
-  fi
-  
-  local seed_name="$(basename $(dirname "$seed_match"))"
-  local seed_file_name="$(basename "$seed_match")"
-  local when_res
-
-  # echo "$seed_name" >&2
-  if istrue $when; then
-    when_res="true"
-    echo "$seed_match"
-  else
-    when_res="false"
-  fi
-
-  [[ -f "$when" ]] && when="$(basename "$when")"
-
-
-  printf "==============\nseed name: %s\nseed_file: %s\nwhen: %s\nwhen_res: %s\n" "$seed_name" "$seed_file_name" "$when" "$when_res" >&2
-
-
+      when_res="false"
+    fi
+    [[ -f "$when" ]] && when="$(basename "$when")"
+    printf "==============\nseed name: %s\nseed_file: %s\nwhen: %s\nwhen_res: %s\n==============\n" "$seed_name" "$seed_file_name" "$when" "$when_res" >&2
 
   }
-
 
   target_seeds=()
   build_target_seeds() {
@@ -461,11 +456,11 @@ get_seed(){
         build_target_seeds "$layers/${line}.conf"
         
       elif [ -d "$seeds/$line" ]; then
-        # vs="$(valid_seed "$seeds/$line")"
-    
-        seed="$(get_seed "$seeds/$line")"
+        seed="$(get_seed "$seeds/$line")" || exit $?
 
         if [[ "$seed" != "" ]] && [[ " ${target_seeds[@]} " != *" $seed "* ]]; then
+          [[ ! -x "$seed" ]] && echo "get_seed returned non-executable: $seed" && exit 45
+          echo "staging seed: $seed"
           target_seeds+=("$seed")
         fi
 
@@ -476,16 +471,10 @@ get_seed(){
 
     done < "$file"
 
-    # echo "done: $file contained $index lines"
   }
   build_target_seeds "$target_profile"
 
-
-
-
   for seed in "${target_seeds[@]}"; do
-
-    # echo "$seed"
     $seed
   done
 }
