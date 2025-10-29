@@ -4,7 +4,7 @@
 # [[ -f "$setfile" ]] && source "$setfile"
 
 if [ -z "$_dev" ]; then
-  SUDO_FILE="env/sudo.key"
+  SUDO_FILE="$PWD/env/sudo.key"
 fi
 
 readonly DEPS="git bash curl"
