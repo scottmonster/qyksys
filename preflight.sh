@@ -141,6 +141,7 @@ ensure_sudo_usable(){
   local to_run=""
   
   if ! is_installed sudo; then
+    echo "sudo is not installed"
     local install_cmd
     install_cmd=$(get_install_cmd) || { echo "ERROR: Unknown package manager" >&2; exit 1; }
     to_run="${install_cmd} sudo && "
@@ -166,6 +167,7 @@ ensure_sudo_usable(){
       exit 0
     fi
   fi
+  echo "sudo should be usable"
 }
 
 validate_sudo_secret(){
@@ -214,11 +216,14 @@ ensure_sudo_ready(){
     return 0
   fi
 
+  echo "not running as root"
+
   ensure_sudo_usable
 
   sudo -k
 
   if [ -f "$SUDO_FILE" ] && validate_sudo_secret; then
+    echo "existing sudo file $SUDO_FILE validated"
     return 0
   fi
 
@@ -268,4 +273,4 @@ check_and_install_packages(){
 
 
 ensure_sudo_ready
-check_and_install_packages
+check_and_install_packages "$DEBIAN_DEPS"

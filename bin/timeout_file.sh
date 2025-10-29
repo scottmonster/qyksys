@@ -5,6 +5,7 @@
 # Usage: ./file_lock.sh <file_path> [time]
 #   time format: 1h|1H (hours), 5m|5M (minutes), 600s|600S (seconds), 300 (seconds if no unit)
 
+# set -x
 set -euo pipefail
 
 readonly SCRIPT_NAME="$(basename "$0")"
@@ -45,7 +46,7 @@ check_already_running(){
     pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
     
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      printf "Script %s is already running (PID: %s)\n" "$SCRIPT_NAME" "$pid" >&2
+      printf "Script %s is already running (PID: %s)\n" "$SCRIPT_NAME" "$pid"
       exit 0
     fi
   fi
@@ -67,7 +68,7 @@ parse_time(){
   else
     printf "Error: Invalid time format '%s'\n" "$time_str" >&2
     printf "Valid formats: 1h, 5m, 600s, or plain number (seconds)\n" >&2
-    exit 1
+    exit 11
   fi
   
   # Convert to seconds based on unit
@@ -83,7 +84,7 @@ parse_time(){
       ;;
     *)
       printf "Error: Unknown time unit '%s'\n" "$unit" >&2
-      exit 1
+      exit 22
       ;;
   esac
   
@@ -118,7 +119,7 @@ main(){
   # Verify file exists
   if [ ! -f "$file_path" ]; then
     printf "Error: File '%s' does not exist\n" "$file_path" >&2
-    exit 1
+    exit 33
   fi
   
   # Display what we're going to do

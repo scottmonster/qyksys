@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 
+# setfile="env/set.sh"
+# [[ -f "$setfile" ]] && source "$setfile"
 
+if [ -z "$_dev" ]; then
+  SUDO_FILE="env/sudo.key"
+fi
 
 readonly DEBIAN_DEPS="git bash"
 
 
 
-readonly BOOTSTRAP_DIR="/tmp/bootstrap"
+# readonly BOOTSTRAP_DIR="/tmp/bootstrap"
 readonly BOOTSTRAP_DIR="${BOOTSTRAP_DIR:-/tmp/bootstrap}"
 readonly SUDO_FILE="${SUDO_FILE:-$BOOTSTRAP_DIR/sudo.key}"
 readonly SUDO_FILE_TIMEOUT="2h"
 
-
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Cleanup handler
 cleanup(){
-  timeout_script="./bin/timeout_file.sh"
+  echo "timeout file is broken"
+  timeout_script="$SCRIPT_DIR/bin/timeout_file.sh"
   if [ -f "$timeout_script" ]; then
     "$timeout_script" "$SUDO_FILE" "$SUDO_FILE_TIMEOUT" &
   fi
@@ -24,8 +30,12 @@ trap cleanup EXIT
 
 
 main(){
+  source preflight.sh
+
 
 }
 
 main "$@"
-exit 1
+exit 0
+
+
